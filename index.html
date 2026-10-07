@@ -39,7 +39,6 @@
   </script>
 
   <style>
-    /* Estilos CSS do mapa e animações */
     #map { height: 100%; width: 100%; min-height: 380px; }
     .pulse-danger {
       box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
@@ -79,7 +78,6 @@
 
   <div class="flex-1 flex flex-col md:flex-row overflow-hidden relative">
 
-    <!-- Painel Lateral / Barra de Ferramentas -->
     <aside class="w-full md:w-96 bg-slate-800/95 border-r border-slate-700 flex flex-col z-20 shadow-xl max-h-[48vh] md:max-h-none overflow-hidden">
       
       <!-- Controles de Filtros e Ações Rápidas -->
@@ -120,7 +118,7 @@
       </div>
 
       <div id="places-list" class="flex-1 overflow-y-auto p-3 space-y-2.5">
-        <!-- Renderizado dinamicamente via JavaScript -->
+        <!-- Lista carregada via JavaScript -->
       </div>
 
       <!-- Barra Inferior de Status do GPS -->
@@ -135,7 +133,6 @@
       </div>
     </aside>
 
-    <!-- Map Container -->
     <main class="flex-1 relative h-full">
       <div id="map"></div>
 
@@ -164,8 +161,6 @@
     </main>
   </div>
 
-
-  <!-- Modal 1: Ligar para Emergência (SOS) -->
   <div id="emergency-modal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[2000] hidden flex items-center justify-center p-4">
     <div class="bg-slate-900 border-2 border-emergency-600 rounded-3xl max-w-md w-full p-6 text-center shadow-2xl space-y-5 relative">
       <button onclick="closeEmergencyModal()" class="absolute top-4 right-4 text-slate-400 hover:text-white text-lg">
@@ -208,7 +203,6 @@
     </div>
   </div>
 
-  <!-- Modal 2: Disponibilizar Insumo P2P -->
   <div id="offer-modal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[2000] hidden flex items-center justify-center p-4">
     <div class="bg-slate-900 border border-slate-700 rounded-3xl max-w-lg w-full p-6 space-y-4 relative">
       <button onclick="closeOfferSupplyModal()" class="absolute top-4 right-4 text-slate-400 hover:text-white text-lg">
@@ -265,8 +259,6 @@
     </div>
   </div>
 
-
-  <!-- Modal 3: Triagem IA Gemini para Primeiros Socorros -->
   <div id="ai-modal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[2000] hidden flex items-center justify-center p-4">
     <div class="bg-slate-900 border border-emerald-500/40 rounded-3xl max-w-lg w-full p-6 space-y-4 relative flex flex-col max-h-[85vh]">
       
@@ -284,10 +276,10 @@
         </div>
       </div>
 
-      <!-- Chat Container -->
+      <!-- Chat Box -->
       <div id="ai-chat-box" class="flex-1 overflow-y-auto bg-slate-950/60 p-3 rounded-2xl border border-slate-800 space-y-3 text-xs">
         <div class="bg-slate-800 p-3 rounded-2xl rounded-tl-none border border-slate-700 text-slate-300">
-          👋 Olá! Sou o assistente de triagem de emergência do LifeGuard. Como posso te auxiliar com primeiros socorros de emergência enquanto o atendimento médico chega?
+          👋 Olá! Sou o assistente de triagem de emergência do LifeGuard. Como posso te auxiliar com primeiros socorros enquanto o atendimento médico chega?
           <div class="mt-2 text-[10px] text-amber-400/90 font-medium">*Nota: Este assistente não substitui atendimento médico presencial (SAMU 192).</div>
         </div>
       </div>
@@ -301,7 +293,6 @@
           </button>
         </div>
         
-        <!-- Atalhos Rápidos -->
         <div class="flex flex-wrap gap-1.5 pt-1">
           <button onclick="sendQuickPrompt('Primeiros socorros para crise de asma sem bombinha')" class="bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] px-2.5 py-1 rounded-lg border border-slate-700">
             🫁 Crise de Asma sem Bombinha
@@ -315,15 +306,13 @@
   </div>
 
   <script>
-    /* Estado Global da Aplicação */
     let map;
     let userMarker;
-    let userLat = -22.7562; // Coordenadas padrão da baixada / RJ
+    let userLat = -22.7562;
     let userLng = -43.4607;
     let currentFilter = 'all';
     let mapMarkers = [];
 
-    /* Banco de Dados de Exemplo (Doadores P2P, Farmácias 24h e Hospitais) */
     const mockLocations = [
       {
         id: 'p2p-1',
