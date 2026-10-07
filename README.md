@@ -1,1 +1,763 @@
-# lifeguardd-app
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>LifeGuard Health - Emergência & Rede P2P</title>
+  
+  <!-- CDNs: Tailwind CSS, FontAwesome e Leaflet Maps -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#eef2ff',
+              500: '#3b82f6',
+              600: '#2563eb',
+              700: '#1d4ed8'
+            },
+            emergency: {
+              500: '#ef4444',
+              600: '#dc2626',
+              700: '#b91c1c'
+            }
+          },
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    /* Estilos CSS do mapa e animações */
+    #map { height: 100%; width: 100%; min-height: 380px; }
+    .pulse-danger {
+      box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+      animation: pulse-red 1.5s infinite;
+    }
+    @keyframes pulse-red {
+      0% { transform: scale(0.98); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+      70% { transform: scale(1.03); box-shadow: 0 0 0 14px rgba(239, 68, 68, 0); }
+      100% { transform: scale(0.98); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+    }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #0f172a; }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #475569; }
+  </style>
+</head>
+<body class="bg-slate-900 text-slate-100 font-sans antialiased h-screen flex flex-col overflow-hidden">
+
+  <header class="bg-slate-800/90 backdrop-blur-md border-b border-slate-700 px-4 py-3 flex items-center justify-between z-30 shrink-0">
+    <div class="flex items-center space-x-3">
+      <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center text-white shadow-lg shadow-blue-500/20">
+        <i class="fa-solid fa-heart-pulse text-xl"></i>
+      </div>
+      <div>
+        <h1 class="text-lg font-bold bg-gradient-to-r from-white to-slate-300 bg-clip-text text-transparent leading-none">LifeGuard SOS</h1>
+        <p class="text-xs text-slate-400 font-medium mt-0.5">Asma & Diabetes Care Network</p>
+      </div>
+    </div>
+
+    <!-- Botão de Emergência SAMU -->
+    <button onclick="openEmergencyModal()" class="pulse-danger bg-emergency-600 hover:bg-emergency-700 text-white font-bold px-4 py-2 rounded-xl flex items-center space-x-2 text-sm shadow-lg transition-all active:scale-95">
+      <i class="fa-solid fa-phone-flip animate-bounce"></i>
+      <span class="hidden sm:inline">LIGAR PARA</span>
+      <span>EMERGÊNCIA (192)</span>
+    </button>
+  </header>
+
+  <div class="flex-1 flex flex-col md:flex-row overflow-hidden relative">
+
+    <!-- Painel Lateral / Barra de Ferramentas -->
+    <aside class="w-full md:w-96 bg-slate-800/95 border-r border-slate-700 flex flex-col z-20 shadow-xl max-h-[48vh] md:max-h-none overflow-hidden">
+      
+      <!-- Controles de Filtros e Ações Rápidas -->
+      <div class="p-3 border-b border-slate-700/80 bg-slate-800/50 space-y-2">
+        <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider flex justify-between items-center">
+          <span>Filtrar Pontos Próximos</span>
+          <span id="radius-badge" class="text-blue-400 font-medium">Raio: 10 km</span>
+        </div>
+        
+        <div class="grid grid-cols-4 gap-1 bg-slate-900/80 p-1 rounded-xl text-xs font-medium">
+          <button onclick="setFilter('all')" id="btn-filter-all" class="filter-btn active bg-blue-600 text-white py-1.5 rounded-lg transition text-center">
+            Todos
+          </button>
+          <button onclick="setFilter('p2p')" id="btn-filter-p2p" class="filter-btn text-slate-400 hover:text-white py-1.5 rounded-lg transition text-center flex items-center justify-center space-x-1">
+            <i class="fa-solid fa-hand-holding-hand text-xs"></i>
+            <span>Doador</span>
+          </button>
+          <button onclick="setFilter('pharmacy')" id="btn-filter-pharmacy" class="filter-btn text-slate-400 hover:text-white py-1.5 rounded-lg transition text-center flex items-center justify-center space-x-1">
+            <i class="fa-solid fa-prescription-bottle-medical text-xs"></i>
+            <span>Farmácia</span>
+          </button>
+          <button onclick="setFilter('hospital')" id="btn-filter-hospital" class="filter-btn text-slate-400 hover:text-white py-1.5 rounded-lg transition text-center flex items-center justify-center space-x-1">
+            <i class="fa-solid fa-hospital text-xs"></i>
+            <span>Hospital</span>
+          </button>
+        </div>
+
+        <div class="grid grid-cols-2 gap-2 pt-1">
+          <button onclick="openOfferSupplyModal()" class="bg-indigo-600/20 border border-indigo-500/40 text-indigo-300 hover:bg-indigo-600/30 font-semibold py-2 px-3 rounded-xl text-xs flex items-center justify-center space-x-2 transition">
+            <i class="fa-solid fa-plus-circle"></i>
+            <span>Disponibilizar Insumo</span>
+          </button>
+          <button onclick="openAiAssistantModal()" class="bg-emerald-600/20 border border-emerald-500/40 text-emerald-300 hover:bg-emerald-600/30 font-semibold py-2 px-3 rounded-xl text-xs flex items-center justify-center space-x-2 transition">
+            <i class="fa-solid fa-robot"></i>
+            <span>Triagem IA de Crise</span>
+          </button>
+        </div>
+      </div>
+
+      <div id="places-list" class="flex-1 overflow-y-auto p-3 space-y-2.5">
+        <!-- Renderizado dinamicamente via JavaScript -->
+      </div>
+
+      <!-- Barra Inferior de Status do GPS -->
+      <div class="p-3 bg-slate-900/90 border-t border-slate-700/80 text-xs text-slate-400 flex justify-between items-center shrink-0">
+        <div class="flex items-center space-x-2">
+          <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+          <span id="gps-status-text">Buscando GPS...</span>
+        </div>
+        <button onclick="recenterMap()" class="text-blue-400 hover:text-blue-300 font-medium">
+          <i class="fa-solid fa-crosshairs mr-1"></i>Recentralizar
+        </button>
+      </div>
+    </aside>
+
+    <!-- Map Container -->
+    <main class="flex-1 relative h-full">
+      <div id="map"></div>
+
+      <!-- Legenda do Mapa -->
+      <div class="absolute bottom-4 right-4 z-[1000] bg-slate-900/90 backdrop-blur-md p-3 rounded-2xl border border-slate-700/80 shadow-2xl text-xs space-y-2 hidden sm:block max-w-xs">
+        <div class="font-semibold text-slate-300 border-b border-slate-700 pb-1">Legenda do Mapa</div>
+        <div class="grid grid-cols-2 gap-2 text-slate-400">
+          <div class="flex items-center space-x-2">
+            <span class="w-3 h-3 rounded-full bg-blue-500 border border-white"></span>
+            <span>Você</span>
+          </div>
+          <div class="flex items-center space-x-2">
+            <span class="w-3 h-3 rounded-full bg-emerald-500"></span>
+            <span>Doador Insumos</span>
+          </div>
+          <div class="flex items-center space-x-2">
+            <span class="w-3 h-3 rounded-full bg-amber-500"></span>
+            <span>Farmácias 24h</span>
+          </div>
+          <div class="flex items-center space-x-2">
+            <span class="w-3 h-3 rounded-full bg-rose-500"></span>
+            <span>Hospitais / UPA</span>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+
+  <!-- Modal 1: Ligar para Emergência (SOS) -->
+  <div id="emergency-modal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[2000] hidden flex items-center justify-center p-4">
+    <div class="bg-slate-900 border-2 border-emergency-600 rounded-3xl max-w-md w-full p-6 text-center shadow-2xl space-y-5 relative">
+      <button onclick="closeEmergencyModal()" class="absolute top-4 right-4 text-slate-400 hover:text-white text-lg">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+
+      <div class="w-20 h-20 bg-emergency-600/20 border-2 border-emergency-500 text-emergency-500 rounded-full flex items-center justify-center mx-auto text-3xl pulse-danger">
+        <i class="fa-solid fa-triangle-exclamation"></i>
+      </div>
+
+      <div>
+        <h2 class="text-2xl font-black text-white uppercase tracking-wide">Emergência Médica</h2>
+        <p class="text-sm text-slate-300 mt-1">Crise respiratória severa ou choque hipoglicêmico? Chame atendimento médico imediatamente.</p>
+      </div>
+
+      <div class="space-y-3 pt-2">
+        <a href="tel:192" class="w-full bg-emergency-600 hover:bg-emergency-700 text-white font-extrabold py-3.5 px-4 rounded-2xl flex items-center justify-center space-x-3 text-lg shadow-lg shadow-emergency-600/30 transition">
+          <i class="fa-solid fa-phone-volume text-xl"></i>
+          <span>LIGAR SAMU (192)</span>
+        </a>
+
+        <a href="tel:193" class="w-full bg-slate-800 border border-slate-700 text-slate-200 hover:bg-slate-700 font-bold py-3 px-4 rounded-2xl flex items-center justify-center space-x-3 text-sm transition">
+          <i class="fa-solid fa-fire-extinguisher text-amber-500"></i>
+          <span>LIGAR BOMBEIROS (193)</span>
+        </a>
+      </div>
+
+      <div class="bg-slate-800/80 p-3 rounded-xl border border-slate-700 text-left space-y-1">
+        <div class="text-xs font-semibold text-slate-400 flex items-center justify-between">
+          <span>SUA LOCALIZAÇÃO DE EMERGÊNCIA:</span>
+          <i class="fa-solid fa-location-dot text-emergency-500"></i>
+        </div>
+        <div id="sos-coordinates" class="text-xs font-mono text-emerald-400 truncate">Obtendo coordenadas GPS...</div>
+      </div>
+
+      <button onclick="shareEmergencyLocation()" class="w-full bg-slate-800 hover:bg-slate-700 border border-blue-500/30 text-blue-400 font-medium py-2.5 px-4 rounded-xl text-xs flex items-center justify-center space-x-2">
+        <i class="fa-solid fa-share-nodes"></i>
+        <span>Compartilhar Localização com Contato</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Modal 2: Disponibilizar Insumo P2P -->
+  <div id="offer-modal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[2000] hidden flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-700 rounded-3xl max-w-lg w-full p-6 space-y-4 relative">
+      <button onclick="closeOfferSupplyModal()" class="absolute top-4 right-4 text-slate-400 hover:text-white text-lg">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+
+      <div class="flex items-center space-x-3 border-b border-slate-800 pb-3">
+        <div class="w-10 h-10 bg-indigo-600/20 text-indigo-400 rounded-xl flex items-center justify-center font-bold">
+          <i class="fa-solid fa-hand-holding-medical text-lg"></i>
+        </div>
+        <div>
+          <h3 class="text-lg font-bold text-white">Disponibilizar Insumo P2P</h3>
+          <p class="text-xs text-slate-400">Ajude vizinhos em momentos críticos de necessidade</p>
+        </div>
+      </div>
+
+      <form id="offer-form" onsubmit="handleSupplySubmit(event)" class="space-y-4 text-sm">
+        <div>
+          <label class="block text-slate-300 text-xs font-semibold mb-1">Tipo de Insumo</label>
+          <select id="supply-type" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white focus:ring-2 focus:ring-indigo-500 outline-none">
+            <option value="bombinha">Bombinha de Asma (Salbutamol / Aerolin)</option>
+            <option value="insulina_rapida">Insulina de Ação Rápida (Lispro / Aspart / Humalog)</option>
+            <option value="insulina_lenta">Insulina NPH / Glargina (Lenta)</option>
+            <option value="glicosimetro">Glicosímetro / Fitas de Teste</option>
+            <option value="espacador">Espaçador Infantil / Adulto</option>
+          </select>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-slate-300 text-xs font-semibold mb-1">Seu Nome / Apelido</label>
+            <input type="text" id="donor-name" placeholder="Ex: Dr. Carlos" required class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white focus:ring-2 focus:ring-indigo-500 outline-none">
+          </div>
+          <div>
+            <label class="block text-slate-300 text-xs font-semibold mb-1">WhatsApp / Telefone</label>
+            <input type="tel" id="donor-phone" placeholder="(21) 99999-9999" required class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white focus:ring-2 focus:ring-indigo-500 outline-none">
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-slate-300 text-xs font-semibold mb-1">Observações (Validade / Retirada)</label>
+          <textarea id="donor-notes" rows="2" placeholder="Ex: Bombinha lacrada, validade 2026. Entrego na portaria do prédio." class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white focus:ring-2 focus:ring-indigo-500 outline-none"></textarea>
+        </div>
+
+        <div class="bg-amber-500/10 border border-amber-500/30 p-3 rounded-xl text-xs text-amber-300 flex items-start space-x-2">
+          <i class="fa-solid fa-shield-halved text-amber-400 mt-0.5"></i>
+          <span>Ao cadastrar, seu ponto aparecerá imediatamente no mapa para usuários próximos em situação de emergência.</span>
+        </div>
+
+        <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-xl shadow-lg transition">
+          Publicar no Mapa de Ajuda
+        </button>
+      </form>
+    </div>
+  </div>
+
+
+  <!-- Modal 3: Triagem IA Gemini para Primeiros Socorros -->
+  <div id="ai-modal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[2000] hidden flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-emerald-500/40 rounded-3xl max-w-lg w-full p-6 space-y-4 relative flex flex-col max-h-[85vh]">
+      
+      <button onclick="closeAiAssistantModal()" class="absolute top-4 right-4 text-slate-400 hover:text-white text-lg">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+
+      <div class="flex items-center space-x-3 border-b border-slate-800 pb-3">
+        <div class="w-10 h-10 bg-emerald-600/20 text-emerald-400 rounded-xl flex items-center justify-center font-bold">
+          <i class="fa-solid fa-robot text-lg"></i>
+        </div>
+        <div>
+          <h3 class="text-lg font-bold text-white">Triagem IA de Primeiros Socorros</h3>
+          <p class="text-xs text-slate-400">Orientação imediata para Asma e Diabetes (Gemini AI)</p>
+        </div>
+      </div>
+
+      <!-- Chat Container -->
+      <div id="ai-chat-box" class="flex-1 overflow-y-auto bg-slate-950/60 p-3 rounded-2xl border border-slate-800 space-y-3 text-xs">
+        <div class="bg-slate-800 p-3 rounded-2xl rounded-tl-none border border-slate-700 text-slate-300">
+          👋 Olá! Sou o assistente de triagem de emergência do LifeGuard. Como posso te auxiliar com primeiros socorros de emergência enquanto o atendimento médico chega?
+          <div class="mt-2 text-[10px] text-amber-400/90 font-medium">*Nota: Este assistente não substitui atendimento médico presencial (SAMU 192).</div>
+        </div>
+      </div>
+
+      <!-- Input do Chat -->
+      <div class="space-y-2 pt-2">
+        <div class="flex space-x-2">
+          <input type="text" id="ai-prompt-input" placeholder="Ex: Estou com falta de ar forte e sem bombinha..." class="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:ring-2 focus:ring-emerald-500 outline-none">
+          <button onclick="askGeminiAi()" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2 rounded-xl text-xs transition flex items-center space-x-1">
+            <i class="fa-solid fa-paper-plane"></i>
+          </button>
+        </div>
+        
+        <!-- Atalhos Rápidos -->
+        <div class="flex flex-wrap gap-1.5 pt-1">
+          <button onclick="sendQuickPrompt('Primeiros socorros para crise de asma sem bombinha')" class="bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] px-2.5 py-1 rounded-lg border border-slate-700">
+            🫁 Crise de Asma sem Bombinha
+          </button>
+          <button onclick="sendQuickPrompt('Sintomas de Hipoglicemia e como agir rápido')" class="bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] px-2.5 py-1 rounded-lg border border-slate-700">
+            🩸 Hipoglicemia Severa
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    /* Estado Global da Aplicação */
+    let map;
+    let userMarker;
+    let userLat = -22.7562; // Coordenadas padrão da baixada / RJ
+    let userLng = -43.4607;
+    let currentFilter = 'all';
+    let mapMarkers = [];
+
+    /* Banco de Dados de Exemplo (Doadores P2P, Farmácias 24h e Hospitais) */
+    const mockLocations = [
+      {
+        id: 'p2p-1',
+        type: 'p2p',
+        title: 'Carlos Silva (Doador)',
+        item: 'Bombinha Aerolin + Espaçador',
+        distanceKm: 0.4,
+        lat: -22.7540,
+        lng: -43.4580,
+        phone: '5521999998888',
+        notes: 'Tenho 1 bombinha lacrada e espaçador infantil esterilizado.',
+        address: 'Rua das Flores, 120 (Próximo à Praça)'
+      },
+      {
+        id: 'p2p-2',
+        type: 'p2p',
+        title: 'Mariana Costa (Doadora)',
+        item: 'Insulina Humalog (Rápida)',
+        distanceKm: 1.1,
+        lat: -22.7580,
+        lng: -43.4650,
+        phone: '5521988887777',
+        notes: 'Caneta de Insulina mantida refrigerada.',
+        address: 'Av. Brasil, 450 - Ap 302'
+      },
+      {
+        id: 'pharmacy-1',
+        type: 'pharmacy',
+        title: 'Drogaria São Paulo 24h',
+        item: 'Estoque Completo de Bombinhas & Insulina',
+        distanceKm: 0.8,
+        lat: -22.7520,
+        lng: -43.4620,
+        phone: '08007708888',
+        notes: 'Aberta 24 Horas. Programa Farmácia Popular.',
+        address: 'Av. Gov. Amaral Peixoto, 300'
+      },
+      {
+        id: 'pharmacy-2',
+        type: 'pharmacy',
+        title: 'Pague Menos 24h',
+        item: 'Insulinas, Glicosímetros e Fitas',
+        distanceKm: 1.5,
+        lat: -22.7600,
+        lng: -43.4550,
+        phone: '08002751313',
+        notes: 'Atendimento e entrega rápida de emergência.',
+        address: 'Rua Getúlio Vargas, 890'
+      },
+      {
+        id: 'hospital-1',
+        type: 'hospital',
+        title: 'Hospital Municipal / UPA 24h',
+        item: 'Pronto Socorro - Sala Vermelha',
+        distanceKm: 1.9,
+        lat: -22.7620,
+        lng: -43.4680,
+        phone: '192',
+        notes: 'Atendimento de emergência respiratória e glicêmica.',
+        address: 'Rua da Saúde, S/N'
+      }
+    ];
+
+    window.onload = function() {
+      initMap();
+      requestUserLocation();
+      renderPlacesList();
+    };
+
+    function initMap() {
+      map = L.map('map', { zoomControl: false }).setView([userLat, userLng], 14);
+
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+        attribution: '&copy; OpenStreetMap &copy; CARTO',
+        maxZoom: 19
+      }).addTo(map);
+
+      L.control.zoom({ position: 'topright' }).addTo(map);
+
+      updateUserMarker(userLat, userLng);
+      renderMapMarkers();
+    }
+
+    function requestUserLocation() {
+      if ('geolocation' in navigator) {
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            userLat = position.coords.latitude;
+            userLng = position.coords.longitude;
+            
+            document.getElementById('gps-status-text').innerText = 'GPS Ativo';
+            updateUserMarker(userLat, userLng);
+            map.setView([userLat, userLng], 15);
+            recalculateDistances();
+            renderPlacesList();
+            renderMapMarkers();
+          },
+          (error) => {
+            console.warn('Geolocation indisponível, usando coordenadas padrão.', error);
+            document.getElementById('gps-status-text').innerText = 'GPS Estimado (Região)';
+          },
+          { enableHighAccuracy: true, timeout: 10000 }
+        );
+      }
+    }
+
+    function updateUserMarker(lat, lng) {
+      if (userMarker) {
+        userMarker.setLatLng([lat, lng]);
+      } else {
+        const userIcon = L.divIcon({
+          className: 'custom-user-icon',
+          html: `<div class="w-6 h-6 bg-blue-600 border-2 border-white rounded-full shadow-lg flex items-center justify-center text-white text-[10px] pulse-danger"><i class="fa-solid fa-user"></i></div>`,
+          iconSize: [24, 24],
+          iconAnchor: [12, 12]
+        });
+        userMarker = L.marker([lat, lng], { icon: userIcon }).addTo(map)
+          .bindPopup('<strong class="text-xs">Sua Localização Atual</strong>');
+      }
+    }
+
+    function renderMapMarkers() {
+      mapMarkers.forEach(m => map.removeLayer(m));
+      mapMarkers = [];
+
+      mockLocations.forEach(loc => {
+        if (currentFilter !== 'all' && loc.type !== currentFilter) return;
+
+        let markerColor = 'bg-emerald-500';
+        let iconClass = 'fa-hand-holding-med';
+
+        if (loc.type === 'pharmacy') {
+          markerColor = 'bg-amber-500';
+          iconClass = 'fa-prescription-bottle-medical';
+        } else if (loc.type === 'hospital') {
+          markerColor = 'bg-rose-600';
+          iconClass = 'fa-hospital';
+        }
+
+        const customIcon = L.divIcon({
+          className: 'custom-loc-icon',
+          html: `<div class="w-8 h-8 ${markerColor} text-white rounded-full border-2 border-white shadow-xl flex items-center justify-center text-xs font-bold hover:scale-110 transition"><i class="fa-solid ${iconClass}"></i></div>`,
+          iconSize: [32, 32],
+          iconAnchor: [16, 16]
+        });
+
+        const marker = L.marker([loc.lat, loc.lng], { icon: customIcon })
+          .addTo(map)
+          .bindPopup(`
+            <div class="text-slate-900 font-sans p-1">
+              <span class="text-[10px] font-bold uppercase tracking-wider text-slate-500">${getCategoryLabel(loc.type)}</span>
+              <h4 class="font-bold text-sm leading-tight">${loc.title}</h4>
+              <p class="text-xs font-semibold text-blue-600 mt-0.5">${loc.item}</p>
+              <p class="text-xs text-slate-600 mt-1">${loc.address}</p>
+              <div class="mt-2 pt-2 border-t border-slate-200 flex justify-between items-center">
+                <span class="text-xs font-bold text-slate-800">${loc.distanceKm} km de você</span>
+                <a href="https://wa.me/${loc.phone}?text=Olá,%20vi%20seu%20ponto%20no%20LifeGuard%20SOS." target="_blank" class="bg-emerald-600 text-white text-xs px-2 py-1 rounded-md font-bold text-decoration-none">Contato</a>
+              </div>
+            </div>
+          `);
+
+        mapMarkers.push(marker);
+      });
+    }
+
+    function getCategoryLabel(type) {
+      if (type === 'p2p') return 'Empréstimo P2P';
+      if (type === 'pharmacy') return 'Farmácia 24h';
+      if (type === 'hospital') return 'Hospital / Urgência';
+      return 'Saúde';
+    }
+
+    function renderPlacesList() {
+      const container = document.getElementById('places-list');
+      container.innerHTML = '';
+
+      const filtered = mockLocations.filter(loc => currentFilter === 'all' || loc.type === currentFilter);
+
+      if (filtered.length === 0) {
+        container.innerHTML = `
+          <div class="text-center py-8 text-slate-500 text-xs">
+            <i class="fa-solid fa-circle-exclamation text-2xl mb-2"></i>
+            <p>Nenhum ponto encontrado para este filtro.</p>
+          </div>
+        `;
+        return;
+      }
+
+      filtered.forEach(loc => {
+        let badgeColor = 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400';
+        let badgeText = 'EMPRÉSTIMO';
+
+        if (loc.type === 'pharmacy') {
+          badgeColor = 'bg-amber-500/10 border-amber-500/30 text-amber-400';
+          badgeText = 'FARMÁCIA';
+        } else if (loc.type === 'hospital') {
+          badgeColor = 'bg-rose-500/10 border-rose-500/30 text-rose-400';
+          badgeText = 'HOSPITAL';
+        }
+
+        const card = document.createElement('div');
+        card.className = 'bg-slate-900/80 hover:bg-slate-900 border border-slate-700/70 p-3 rounded-2xl space-y-2 transition cursor-pointer shadow-md';
+        card.onclick = () => focusLocationOnMap(loc.lat, loc.lng);
+
+        card.innerHTML = `
+          <div class="flex items-start justify-between">
+            <div>
+              <span class="text-[10px] font-extrabold px-2 py-0.5 rounded-full border ${badgeColor}">${badgeText}</span>
+              <h3 class="font-bold text-sm text-white mt-1.5 leading-tight">${loc.title}</h3>
+            </div>
+            <span class="text-xs font-semibold text-blue-400 bg-blue-500/10 px-2 py-1 rounded-lg shrink-0">${loc.distanceKm} km</span>
+          </div>
+
+          <div class="text-xs text-slate-300 font-medium flex items-center space-x-1.5">
+            <i class="fa-solid fa-box-medical text-slate-400 text-xs"></i>
+            <span class="text-emerald-400 font-semibold">${loc.item}</span>
+          </div>
+
+          <div class="text-[11px] text-slate-400 truncate">
+            <i class="fa-solid fa-location-dot text-slate-500 mr-1"></i>${loc.address}
+          </div>
+
+          <div class="flex items-center space-x-2 pt-1 border-t border-slate-800">
+            ${loc.type === 'p2p' ? `
+              <a href="https://wa.me/${loc.phone}?text=Olá,%20preciso%20urgente%20de%20ajuda%20com%20o%20insumo%20${encodeURIComponent(loc.item)}" target="_blank" onclick="event.stopPropagation()" class="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-1.5 px-3 rounded-xl flex items-center justify-center space-x-1.5 transition">
+                <i class="fa-brands fa-whatsapp"></i>
+                <span>Pedir Empréstimo</span>
+              </a>
+            ` : `
+              <a href="https://www.google.com/maps/dir/?api=1&destination=${loc.lat},${loc.lng}" target="_blank" onclick="event.stopPropagation()" class="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold py-1.5 px-3 rounded-xl flex items-center justify-center space-x-1.5 transition">
+                <i class="fa-solid fa-route text-blue-400"></i>
+                <span>Ver Rota GPS</span>
+              </a>
+            `}
+          </div>
+        `;
+
+        container.appendChild(card);
+      });
+    }
+
+    function setFilter(filterType) {
+      currentFilter = filterType;
+      
+      document.querySelectorAll('.filter-btn').forEach(btn => {
+        btn.classList.remove('bg-blue-600', 'text-white');
+        btn.classList.add('text-slate-400');
+      });
+
+      const activeBtn = document.getElementById(`btn-filter-${filterType}`);
+      if (activeBtn) {
+        activeBtn.classList.add('bg-blue-600', 'text-white');
+        activeBtn.classList.remove('text-slate-400');
+      }
+
+      renderPlacesList();
+      renderMapMarkers();
+    }
+
+    function focusLocationOnMap(lat, lng) {
+      map.flyTo([lat, lng], 16, { animate: true, duration: 1.2 });
+      mapMarkers.forEach(m => {
+        if (m.getLatLng().lat === lat && m.getLatLng().lng === lng) {
+          m.openPopup();
+        }
+      });
+    }
+
+    function recenterMap() {
+      map.flyTo([userLat, userLng], 15, { animate: true });
+    }
+
+    function recalculateDistances() {
+      mockLocations.forEach(loc => {
+        loc.distanceKm = calculateHaversineDistance(userLat, userLng, loc.lat, loc.lng);
+      });
+      mockLocations.sort((a, b) => a.distanceKm - b.distanceKm);
+    }
+
+    function calculateHaversineDistance(lat1, lon1, lat2, lon2) {
+      const R = 6371;
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLon = (lon2 - lon1) * Math.PI / 180;
+      const a = 
+        Math.sin(dLat/2) * Math.sin(dLat/2) +
+        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+        Math.sin(dLon/2) * Math.sin(dLon/2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+      return parseFloat((R * c).toFixed(1));
+    }
+
+    function openEmergencyModal() {
+      document.getElementById('sos-coordinates').innerText = `Lat: ${userLat.toFixed(4)}, Lng: ${userLng.toFixed(4)}`;
+      document.getElementById('emergency-modal').classList.remove('hidden');
+    }
+
+    function closeEmergencyModal() {
+      document.getElementById('emergency-modal').classList.add('hidden');
+    }
+
+    function openOfferSupplyModal() {
+      document.getElementById('offer-modal').classList.remove('hidden');
+    }
+
+    function closeOfferSupplyModal() {
+      document.getElementById('offer-modal').classList.add('hidden');
+    }
+
+    function openAiAssistantModal() {
+      document.getElementById('ai-modal').classList.remove('hidden');
+    }
+
+    function closeAiAssistantModal() {
+      document.getElementById('ai-modal').classList.add('hidden');
+    }
+
+    function handleSupplySubmit(e) {
+      e.preventDefault();
+      const type = document.getElementById('supply-type').value;
+      const name = document.getElementById('donor-name').value;
+      const phone = document.getElementById('donor-phone').value;
+      const notes = document.getElementById('donor-notes').value;
+
+      const newSupply = {
+        id: 'p2p-' + Date.now(),
+        type: 'p2p',
+        title: `${name} (Doador)`,
+        item: getSupplyLabel(type),
+        distanceKm: 0.1,
+        lat: userLat + 0.0015,
+        lng: userLng + 0.0015,
+        phone: phone.replace(/\D/g,''),
+        notes: notes,
+        address: 'Sua localização cadastrada'
+      };
+
+      mockLocations.unshift(newSupply);
+      closeOfferSupplyModal();
+      setFilter('p2p');
+      recenterMap();
+
+      showNotification('✅ Seu insumo foi cadastrado e publicado no mapa!');
+    }
+
+    function getSupplyLabel(code) {
+      switch(code) {
+        case 'bombinha': return 'Bombinha de Asma';
+        case 'insulina_rapida': return 'Insulina de Ação Rápida';
+        case 'insulina_lenta': return 'Insulina Lenta NPH/Glargina';
+        case 'glicosimetro': return 'Glicosímetro / Fitas de Teste';
+        default: return 'Insumo Médico';
+      }
+    }
+
+    function shareEmergencyLocation() {
+      const shareUrl = `https://maps.google.com/?q=${userLat},${userLng}`;
+      const text = `🚨 EMERGÊNCIA LIFEGUARD: Preciso de medicação/socorro de emergência! Minha localização: ${shareUrl}`;
+      
+      if (navigator.share) {
+        navigator.share({ title: 'Emergência LifeGuard', text: text, url: shareUrl });
+      } else {
+        document.execCommand('copy');
+        showNotification('📋 Link de localização copiado com sucesso!');
+      }
+    }
+
+    function showNotification(msg) {
+      const alertBox = document.createElement('div');
+      alertBox.className = 'fixed top-16 right-4 bg-emerald-600 text-white font-bold text-xs py-3 px-5 rounded-2xl shadow-2xl z-[3000] animate-bounce';
+      alertBox.innerText = msg;
+      document.body.appendChild(alertBox);
+      setTimeout(() => alertBox.remove(), 4000);
+    }
+
+    async function askGeminiAi(customPrompt) {
+      const inputEl = document.getElementById('ai-prompt-input');
+      const prompt = customPrompt || inputEl.value;
+      if (!prompt.trim()) return;
+
+      const chatBox = document.getElementById('ai-chat-box');
+
+      const userMsg = document.createElement('div');
+      userMsg.className = 'bg-blue-600 p-3 rounded-2xl rounded-tr-none text-white self-end text-right ml-6 font-medium';
+      userMsg.innerText = prompt;
+      chatBox.appendChild(userMsg);
+
+      if (!customPrompt) inputEl.value = '';
+
+      const loadingMsg = document.createElement('div');
+      loadingMsg.className = 'bg-slate-800 p-3 rounded-2xl rounded-tl-none border border-slate-700 text-slate-400 italic text-[11px]';
+      loadingMsg.id = 'ai-loading';
+      loadingMsg.innerText = '🤖 Consultando orientações de emergência com Gemini IA...';
+      chatBox.appendChild(loadingMsg);
+      chatBox.scrollTop = chatBox.scrollHeight;
+
+      try {
+        const apiKey = "";
+        const systemPrompt = "Você é um assistente tático de primeiros socorros especializado em Crises de Asma e Emergências Diabéticas (Hipoglicemia e Hiperglicemia). Responda de forma extremamente objetiva e limpa, em tópicos diretos. Reforce sempre que não substitui a ligação urgente para o SAMU (192).";
+
+        const payload = {
+          contents: [{ parts: [{ text: prompt }] }],
+          systemInstruction: { parts: [{ text: systemPrompt }] }
+        };
+
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await response.json();
+        document.getElementById('ai-loading')?.remove();
+
+        const reply = data?.candidates?.[0]?.content?.parts?.[0]?.text || "Mantenha a calma. Em caso de crise respiratória grave, ligue imediatamente para o SAMU 192.";
+
+        const aiMsg = document.createElement('div');
+        aiMsg.className = 'bg-slate-800 p-3 rounded-2xl rounded-tl-none border border-slate-700 text-slate-200 whitespace-pre-line leading-relaxed';
+        aiMsg.innerHTML = reply;
+        chatBox.appendChild(aiMsg);
+        chatBox.scrollTop = chatBox.scrollHeight;
+
+      } catch (err) {
+        document.getElementById('ai-loading')?.remove();
+        const errorMsg = document.createElement('div');
+        errorMsg.className = 'bg-rose-950/80 border border-rose-600 p-3 rounded-2xl text-rose-300';
+        errorMsg.innerText = 'Em emergências com falta de ar ou alteração de consciência, ligue imediatamente para o 192 (SAMU).';
+        chatBox.appendChild(errorMsg);
+      }
+    }
+
+    function sendQuickPrompt(text) {
+      document.getElementById('ai-prompt-input').value = text;
+      askGeminiAi(text);
+    }
+  </script>
+</body>
+</html>
